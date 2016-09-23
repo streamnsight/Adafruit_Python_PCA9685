@@ -91,6 +91,6 @@ useful to emulate PCM with PWM::
 	
 	# starting offset of the ON state in ns
 	pulse_start = 1000000 # 1ms offset (5% of cycle)
-	pusle_width = 1000000 # 1ms pulse width (5% duty cycle)
+	pulse_width = 1000000 # 1ms pulse width (5% duty cycle)
 	
-	pwm.set_pwm_pulse_width_ns(0, pulse_start, pusle_width)
+	pwm.set_pwm_pulse_width_ns(0, pulse_start, pulse_width)
