@@ -80,6 +80,7 @@ class PCA9685(object):
         mode1 = mode1 & ~SLEEP  # wake up (reset sleep)
         self._device.write8(MODE1, mode1)
         time.sleep(0.005)  # wait for oscillator
+        self.freq_hz = None
 
     def set_pwm_freq(self, freq_hz):
         """Set the PWM frequency to the provided value in hertz."""
@@ -100,11 +101,58 @@ class PCA9685(object):
         self._device.write8(MODE1, oldmode | 0x80)
 
     def set_pwm(self, channel, on, off):
-        """Sets a single PWM channel."""
+        """Sets a single PWM channel.
+
+        Pulse start and end times need to be calculated as follow:
+        The frequency set covers the full scale range (12 bits)
+        For example, 50Hz <=> 20ms period <=> 4096 (12 bits)
+        1 unit of time corresponds to 20ms / 4096 ~= 4.88us
+        To start a pulse at 3ms, we have 3/20 = 0.15 => 0.15 * 4096 = 614.4, rounded to 614
+        For a pulse that lasts 5ms, therefore ends at 8ms, we have 8/20 = 0.4 => 0.4 * 4096 = 1638.4 rounded to 1638
+
+        :param channel: int - channel to configure
+        :param on: int - 2 bytes for pulse start time
+        :param off: int - 2 bytes for pulse end time
+        :return:
+        """
         self._device.write8(LED0_ON_L+4*channel, on & 0xFF)
         self._device.write8(LED0_ON_H+4*channel, on >> 8)
         self._device.write8(LED0_OFF_L+4*channel, off & 0xFF)
         self._device.write8(LED0_OFF_H+4*channel, off >> 8)
+
+    def set_pwm_duty_cycle(self, channel, width_pct, start_pct=0):
+        """Set a single PWM channel duty cycle
+
+        :param channel: int - channel to configure
+        :param width_pct: float - width of the pulse in %, i.e. the duty cycle (% time ON)
+        :param start_pct: float - optional, defaults to 0. start offset
+        :return:
+        """
+        on = int(math.floor(4096.0 * start_pct / 100.0 + 0.5))
+        off = int(math.floor(4096.0 * (start_pct + width_pct) / 100.0 + 0.5))
+        on = max(min(on, 4096), 0)
+        off = max(min(off, 4096), 0)
+        self.set_pwm(channel, on, off)
+
+    def set_pwm_pulse_width_ns(self, channel, width_ns, start_ns=0):
+        """Define a pulse width in ns (assuming PWM frequency has been defined previously)
+
+        :param channel: int - the channel to configure
+        :param width_ns: int - the width of the pulse in nanoseconds (ns) i.e. 1E-9s
+        :param start_ns: int - the starting offset of the pulse in nanoseconds (ns) i.e. 1E-9s
+        :return:
+        """
+
+        if self.freq_hz is not None:
+            period_ns = 1e9 / self.freq_hz # ns per pulse
+            # subdiv_ns = period_ns / 4096 # ns per subdivision
+            on = int(math.floor(4096.0 * start_ns / period_ns + 0.5))
+            off = int(math.floor(4096.0 * (start_ns + width_ns) / period_ns + 0.5))
+            on = max(min(on, 4096), 0)
+            off = max(min(off, 4096), 0)
+            self.set_pwm(channel, on, off)
+        else:
+            raise ValueError("Frequency is not set. Set frequency first to configure a pulse in nanoseconds")
 
     def set_all_pwm(self, on, off):
         """Sets all PWM channels."""
